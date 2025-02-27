@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Particle Explorer - Three.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: black; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+<script>
+    let scene, camera, renderer, particles, controls;
+    const imageURL = "https://i.imgur.com/dEETdyO.jpeg"; // Change this to your image
+
+    init();
+
+    function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.z = 500;
+
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+        loadImage(imageURL);
+    }
+
+    function loadImage(url) {
+        const img = new Image();
+        img.crossOrigin = "anonymous"; 
+        img.src = url;
+        img.onload = function () {
+            processImage(img);
+        };
+    }
+
+    function processImage(img) {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+
+        const imageData = ctx.getImageData(0, 0, img.width, img.height).data;
+        createParticles(imageData, img.width, img.height);
+    }
+
+    function createParticles(imageData, width, height) {
+        const geometry = new THREE.BufferGeometry();
+        const positions = [];
+        const colors = [];
+
+        for (let y = 0; y < height; y += 5) {
+            for (let x = 0; x < width; x += 5) {
+                const index = (y * width + x) * 4;
+                const r = imageData[index] / 255;
+                const g = imageData[index + 1] / 255;
+                const b = imageData[index + 2] / 255;
+                const a = imageData[index + 3] / 255;
+
+                if (a > 0.2) {
+                    positions.push(x - width / 2, -y + height / 2, 0);
+                    colors.push(r, g, b);
+                }
+            }
+        }
+
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+        particles = new THREE.Points(geometry, new THREE.PointsMaterial({ vertexColors: true, size: 2 }));
+        scene.add(particles);
+
+        animate();
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+</script>
+
+</body>
+</html>
