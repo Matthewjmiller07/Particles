@@ -8,21 +8,71 @@
     <style>
         body { margin: 0; overflow: hidden; background: black; }
         canvas { display: block; }
+        #ui {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 100;
+        }
+        #progress {
+            width: 200px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #progress-bar {
+            width: 100%;
+            height: 100%;
+            background: #4CAF50;
+            transition: width 0.3s;
+        }
+        #upload-container {
+            margin: 10px 0;
+        }
+        .button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .button:hover {
+            background: #45a049;
+        }
     </style>
 </head>
 <body>
+    <div id="ui">
+        <div id="upload-container">
+            <input type="file" id="imageUpload" accept="image/*" style="display: none">
+            <button class="button" onclick="document.getElementById('imageUpload').click()">Upload Image</button>
+            <button class="button" id="shareButton">Share Game</button>
+        </div>
+        <div>Lives: <span id="livesDisplay">3</span></div>
+        <div>Progress:</div>
+        <div id="progress">
+            <div id="progress-bar"></div>
+        </div>
+    </div>
 
 <script>
     let scene, camera, renderer, particles, paddle, ball;
     let ballVelocity = new THREE.Vector3(2, -2, 0);
     let paddleSpeed = 0;
     const paddleBoundary = 250;
-    const imageURL = "https://i.imgur.com/dEETdyO.jpeg";
+    let imageURL = "https://i.imgur.com/dEETdyO.jpeg";
     let particleGeometry;
     let imageHeight = 250;
     let gameStarted = false;
     const paddleOffset = 500;
     let lives = 3;
+    let totalParticles = 0;
+    let currentParticles = 0;
+    const IMGUR_CLIENT_ID = 'f7029afd615bd8f'; // Replace with your actual Client ID
 
     init();
 
@@ -35,13 +85,22 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        loadImage(imageURL);
+        initWithUrlImage();
         createPaddle();
         createBall();
         animate();
 
         document.addEventListener("keydown", onKeyDown);
         document.addEventListener("keyup", onKeyUp);
+    }
+
+    function initWithUrlImage() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const imageParam = urlParams.get('img');
+        if (imageParam) {
+            imageURL = imageParam;
+            loadImage(imageURL);
+        }
     }
 
     function loadImage(url) {
@@ -97,6 +156,10 @@
 
         particles = new THREE.Points(particleGeometry, material);
         scene.add(particles);
+
+        totalParticles = positions.length / 3;
+        currentParticles = totalParticles;
+        updateProgress();
     }
 
     function createPaddle() {
@@ -148,6 +211,7 @@
             scene.remove(particles);
         }
         loadImage(imageURL);
+        updateProgress();
     }
 
     function animate() {
@@ -230,14 +294,107 @@
             }
         }
 
+        currentParticles = newPositions.length / 3;
+        updateProgress();
+
         particleGeometry.setAttribute("position", new THREE.Float32BufferAttribute(newPositions, 3));
         particleGeometry.setAttribute("color", new THREE.Float32BufferAttribute(newColors, 3));
+    }
+
+    function updateProgress() {
+        const progress = (currentParticles / totalParticles) * 100;
+        document.getElementById('progress-bar').style.width = progress + '%';
+        document.getElementById('livesDisplay').textContent = lives;
     }
 
     window.addEventListener("resize", function () {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    document.getElementById('imageUpload').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // Handle local image display first
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (particles) {
+                    scene.remove(particles);
+                }
+                imageURL = e.target.result;
+                loadImage(imageURL);
+                resetEntireGame();
+            };
+            reader.readAsDataURL(file);
+
+            // Try uploading to Imgur
+            const formData = new FormData();
+            formData.append('image', file);
+
+            // Add a timeout to the fetch request
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+            fetch('https://api.imgur.com/3/image', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Client-ID ${IMGUR_CLIENT_ID}`
+                },
+                body: formData,
+                signal: controller.signal
+            })
+            .then(response => {
+                clearTimeout(timeoutId);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set('img', data.data.link);
+                    window.history.pushState({}, '', newUrl);
+                    alert('Image uploaded successfully! You can now share this page URL with others.');
+                } else {
+                    throw new Error('Upload failed: ' + (data.data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.warn('Imgur upload failed, falling back to local mode:', error);
+                // Fall back to base64 URL if Imgur upload fails
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const newUrl = new URL(window.location.href);
+                        const base64Data = e.target.result;
+                        // Only use first 2000 characters of base64 to avoid URL length issues
+                        newUrl.searchParams.set('img', base64Data.substring(0, 2000));
+                        window.history.pushState({}, '', newUrl);
+                        console.log('Local URL updated successfully');
+                    } catch (error) {
+                        console.warn('Could not update URL:', error);
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+    });
+
+    document.getElementById('shareButton').addEventListener('click', function() {
+        const gameUrl = window.location.href;
+        if (navigator.share) {
+            navigator.share({
+                title: 'Particle Brick Breaker',
+                text: 'Check out this awesome game!',
+                url: gameUrl
+            }).catch(console.error);
+        } else {
+            navigator.clipboard.writeText(gameUrl)
+                .then(() => alert('Game URL copied to clipboard!'))
+                .catch(console.error);
+        }
     });
 </script>
 
