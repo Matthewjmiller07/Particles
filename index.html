@@ -57,6 +57,11 @@
         <div id="progress">
             <div id="progress-bar"></div>
         </div>
+        <div style="margin-top: 10px;">
+            <label for="particleSize" style="color: white;">Particle Size: </label>
+            <input type="range" id="particleSize" min="1" max="20" value="4" style="width: 100px;">
+            <span id="particleSizeValue" style="color: white;">4</span>
+        </div>
     </div>
 
 <script>
@@ -73,6 +78,7 @@
     let totalParticles = 0;
     let currentParticles = 0;
     const IMGUR_CLIENT_ID = 'f7029afd615bd8f'; // Replace with your actual Client ID
+    let particleSizeMultiplier = 4;
 
     // Add these new touch control functions
     let touchStartX = 0;
@@ -102,6 +108,21 @@
         renderer.domElement.addEventListener('touchstart', onTouchStart);
         renderer.domElement.addEventListener('touchmove', onTouchMove);
         renderer.domElement.addEventListener('touchend', onTouchEnd);
+
+        // Add this after init() function
+        document.getElementById('particleSize').addEventListener('input', function(e) {
+            particleSizeMultiplier = parseInt(e.target.value);
+            document.getElementById('particleSizeValue').textContent = particleSizeMultiplier;
+            if (particleGeometry) {
+                // Recreate particles with new size
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = function() {
+                    processImage(img);
+                };
+                img.src = imageURL;
+            }
+        });
     }
 
     function initWithUrlImage() {
@@ -155,9 +176,10 @@
         const colors = [];
 
         const verticalOffset = 400;
+        const sampleStep = Math.max(1, Math.floor(particleSizeMultiplier)); // Adjust sampling based on particle size
 
-        for (let y = 0; y < height; y += 5) {
-            for (let x = 0; x < width; x += 5) {
+        for (let y = 0; y < height; y += sampleStep) {
+            for (let x = 0; x < width; x += sampleStep) {
                 const index = (y * width + x) * 4;
                 const r = imageData[index] / 255;
                 const g = imageData[index + 1] / 255;
@@ -178,11 +200,18 @@
         particleGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
         particleGeometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 
-        const material = new THREE.PointsMaterial({ vertexColors: true, size: 4 });
+        if (particles) {
+            scene.remove(particles);
+        }
+
+        const material = new THREE.PointsMaterial({ 
+            vertexColors: true, 
+            size: particleSizeMultiplier * 5/5
+        });
 
         particles = new THREE.Points(particleGeometry, material);
         scene.add(particles);
-
+        
         totalParticles = positions.length / 3;
         currentParticles = totalParticles;
         updateProgress();
@@ -206,6 +235,11 @@
     }
 
     function onKeyDown(event) {
+        // Prevent default actions for space and arrow keys
+        if (event.key === " " || event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            event.preventDefault(); // Prevent space from triggering buttons
+        }
+
         if (event.key === "ArrowLeft") {
             paddleSpeed = -7;
         }
@@ -213,7 +247,6 @@
             paddleSpeed = 7;
         }
         if (event.key === " ") {
-            event.preventDefault(); // Prevent space from triggering buttons
             if (!gameStarted) {
                 gameStarted = true;
             }
@@ -289,8 +322,11 @@
             for (let i = 0; i < positions.length; i += 3) {
                 const dx = ball.position.x - positions[i];
                 const dy = ball.position.y - positions[i + 1];
-
-                if (dx * dx + dy * dy < 900) {
+                
+                // Adjust collision radius based on particle size
+                const collisionRadius = 100 + (particleSizeMultiplier * 20);
+                
+                if (dx * dx + dy * dy < collisionRadius) {
                     positionsToRemove.push(i);
                     ballVelocity.y *= -1;
                 }
@@ -319,7 +355,8 @@
         for (let i = 0; i < positions.length; i += 3) {
             if (!indices.includes(i)) {
                 newPositions.push(positions[i], positions[i + 1], positions[i + 2]);
-                newColors.push(colors[i], colors[i + 1], colors[i + 2]);
+                const colorIndex = Math.floor(i/3);
+                newColors.push(colors[colorIndex * 3], colors[colorIndex * 3 + 1], colors[colorIndex * 3 + 2]);
             }
         }
 
