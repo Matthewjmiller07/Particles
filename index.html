@@ -69,7 +69,7 @@
     let ballVelocity = new THREE.Vector3(2, -2, 0);
     let paddleSpeed = 0;
     const paddleBoundary = 250;
-    let imageURL = "https://i.imgur.com/pwmUsu7.png";
+    let imageURL = "https://i.imgur.com/4kZn430.png";
     let particleGeometry;
     let imageHeight = 250;
     let gameStarted = false;
@@ -78,7 +78,11 @@
     let totalParticles = 0;
     let currentParticles = 0;
     const IMGUR_CLIENT_ID = 'f7029afd615bd8f'; // Replace with your actual Client ID
-    let particleSizeMultiplier = 4;
+    let particleSizeMultiplier = 11;
+    const MAX_PARTICLE_SIZE = 20; // Define a maximum particle size
+    const MIN_PARTICLE_SIZE = 1;   // Define a minimum particle size
+    const MAX_IMAGE_HEIGHT = 800; // Define a maximum height for the image
+    const MAX_IMAGE_WIDTH = 1600; // Define a maximum width for the image
 
     // Add these new touch control functions
     let touchStartX = 0;
@@ -113,46 +117,26 @@
         document.getElementById('particleSize').addEventListener('input', function(e) {
             particleSizeMultiplier = parseInt(e.target.value);
             document.getElementById('particleSizeValue').textContent = particleSizeMultiplier;
-            if (particleGeometry) {
-                // Recreate particles with new size
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = function() {
-                    processImage(img);
-                };
-                img.src = imageURL;
-            }
+
+            // Recreate particles with new size
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = function() {
+                processImage(img);
+            };
+            img.src = imageURL; // Ensure the image is reloaded
         });
     }
 
     function initWithUrlImage() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const imageParam = urlParams.get('img');
-        console.log('Initializing image:', imageParam ? 'Using URL parameter' : 'Using default image');
-        if (imageParam) {
-            imageURL = imageParam;
-        }
         loadImage(imageURL);
     }
 
     function loadImage(url) {
-        console.log('Attempting to load image from:', url);
         const img = new Image();
         img.crossOrigin = "anonymous";
         
-        img.onerror = function(e) {
-            console.error('Error loading image:', e);
-            // Fallback to default image if the specified image fails to load
-            if (url !== "https://i.imgur.com/pwmUsu7.png") {
-                console.log('Falling back to default image');
-                loadImage("https://i.imgur.com/pwmUsu7.png");
-            } else {
-                console.error('Default image failed to load!');
-            }
-        };
-
         img.onload = function() {
-            console.log('Image loaded successfully:', url);
             processImage(img);
         };
 
@@ -162,12 +146,21 @@
     function processImage(img) {
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0, img.width, img.height);
 
-        const imageData = ctx.getImageData(0, 0, img.width, img.height).data;
-        createParticles(imageData, img.width, img.height);
+        // Calculate scale factor to fit the image within the maximum dimensions
+        const scaleWidth = MAX_IMAGE_WIDTH / img.width;
+        const scaleHeight = MAX_IMAGE_HEIGHT / img.height;
+        const scaleFactor = Math.min(scaleWidth, scaleHeight, 1); // Use the smaller scale factor to maintain aspect ratio
+
+        // Set canvas dimensions based on scaled image
+        canvas.width = img.width * scaleFactor;
+        canvas.height = img.height * scaleFactor;
+
+        // Draw the scaled image on the canvas
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height); // Draw scaled image
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        createParticles(imageData, canvas.width, canvas.height);
     }
 
     function createParticles(imageData, width, height) {
@@ -175,7 +168,7 @@
         const positions = [];
         const colors = [];
 
-        const verticalOffset = 400;
+        const verticalOffset = height / 2; // Center the image vertically
         const sampleStep = Math.max(1, Math.floor(particleSizeMultiplier)); // Adjust sampling based on particle size
 
         for (let y = 0; y < height; y += sampleStep) {
@@ -206,7 +199,7 @@
 
         const material = new THREE.PointsMaterial({ 
             vertexColors: true, 
-            size: particleSizeMultiplier * 5/5
+            size: Math.min(particleSizeMultiplier * 5/5, MAX_PARTICLE_SIZE) // Ensure size does not exceed max
         });
 
         particles = new THREE.Points(particleGeometry, material);
@@ -237,9 +230,10 @@
     function onKeyDown(event) {
         // Prevent default actions for space and arrow keys
         if (event.key === " " || event.key === "ArrowLeft" || event.key === "ArrowRight") {
-            event.preventDefault(); // Prevent space from triggering buttons
+            event.preventDefault(); // Prevent space and arrow keys from triggering buttons
         }
 
+        // Only allow paddle movement if the game has started
         if (event.key === "ArrowLeft") {
             paddleSpeed = -7;
         }
@@ -248,14 +242,15 @@
         }
         if (event.key === " ") {
             if (!gameStarted) {
-                gameStarted = true;
+                gameStarted = true; // Start the game
+                console.log("Game started");
             }
         }
     }
 
     function onKeyUp(event) {
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-            paddleSpeed = 0;
+            paddleSpeed = 0; // Stop paddle movement
         }
     }
 
