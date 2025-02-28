@@ -74,6 +74,10 @@
     let currentParticles = 0;
     const IMGUR_CLIENT_ID = 'f7029afd615bd8f'; // Replace with your actual Client ID
 
+    // Add these new touch control functions
+    let touchStartX = 0;
+    let lastTouchX = 0;
+
     init();
 
     function init() {
@@ -90,8 +94,14 @@
         createBall();
         animate();
 
+        // Add keyboard controls
         document.addEventListener("keydown", onKeyDown);
         document.addEventListener("keyup", onKeyUp);
+
+        // Add touch controls
+        renderer.domElement.addEventListener('touchstart', onTouchStart);
+        renderer.domElement.addEventListener('touchmove', onTouchMove);
+        renderer.domElement.addEventListener('touchend', onTouchEnd);
     }
 
     function initWithUrlImage() {
@@ -418,6 +428,35 @@
                 .catch(console.error);
         }
     });
+
+    // Add these new touch control functions
+    function onTouchStart(event) {
+        event.preventDefault();
+        touchStartX = event.touches[0].clientX;
+        lastTouchX = touchStartX;
+        
+        // Start game on touch if not started
+        if (!gameStarted) {
+            gameStarted = true;
+        }
+    }
+
+    function onTouchMove(event) {
+        event.preventDefault();
+        const touchX = event.touches[0].clientX;
+        const deltaX = touchX - lastTouchX;
+        
+        // Move paddle based on touch movement
+        paddle.position.x += deltaX * 1.5; // Adjust sensitivity with multiplier
+        paddle.position.x = Math.max(-paddleBoundary, Math.min(paddleBoundary, paddle.position.x));
+        
+        lastTouchX = touchX;
+    }
+
+    function onTouchEnd(event) {
+        event.preventDefault();
+        paddleSpeed = 0;
+    }
 </script>
 
 </body>
